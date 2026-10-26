@@ -1,0 +1,6 @@
+{
+  "name": "MD سجاد",
+  "description": "متجر سجاد MD - تشكيلة مودرن وكلاسيك وأطفال وموكيت بأفضل الأسعار وتوصيل لجميع محافظات مصر والدفع عند الاستلام",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

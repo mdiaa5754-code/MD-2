@@ -1,0 +1,22 @@
+{
+  "name": "md-carpets",
+  "version": "1.0.0",
+  "description": "تطبيق ومتجر سجاد MD - محمد ضياء (بيع وتوزيع سجاد بالجملة والقطاعي)",
+  "private": true,
+  "scripts": {
+    "generate": "node tools/generate-products.js",
+    "compress": "node tools/compress-images.js",
+    "cap:sync": "npx cap sync android",
+    "cap:open": "npx cap open android",
+    "build:apk": "cd android && ./gradlew assembleDebug"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "sharp": "^0.33.5"
+  },
+  "author": "Mohamed Diaa",
+  "license": "UNLICENSED"
+}

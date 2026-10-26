@@ -1,0 +1,95 @@
+name: Build MD Carpets Android APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Set up Java JDK 17 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Dependencies
+        run: |
+          npm ci || npm install
+
+      - name: Auto-generate products catalog from images
+        run: |
+          node tools/generate-products.js
+
+      - name: Generate App Icons & Splash Screen (Capacitor Assets)
+        # يستخدم الصور الموجودة في resources/icon.png و resources/splash.png
+        run: |
+          npx @capacitor/assets generate --android || true
+
+      - name: Add Android Platform (if missing)
+        run: |
+          if [ ! -d "android" ]; then
+            echo "Android folder not found, adding Capacitor Android platform..."
+            npx cap add android
+          else
+            echo "Android folder already exists, skipping add."
+          fi
+
+      - name: Sync Web Assets to Android
+        run: |
+          npx cap sync android
+
+      - name: Build Debug APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload Debug APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MD-Carpets-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      # =========================================================================
+      # اختياري: بناء نسخة موثقة Release APK للرفع لمتجر Google Play
+      # لتفعيل هذه الخطوة: قم بإنشاء ملف Keystore وأضف البيانات في GitHub Secrets:
+      # KEYSTORE_BASE64, KEY_ALIAS, KEY_PASSWORD
+      # =========================================================================
+      # - name: Build Signed Release APK (Optional)
+      #   if: env.KEYSTORE_BASE64 != ''
+      #   env:
+      #     KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      #     KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      #     KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      #   run: |
+      #     echo "$KEYSTORE_BASE64" | base64 --decode > android/app/my-upload-key.jks
+      #     cd android
+      #     ./gradlew assembleRelease
+      # - name: Upload Release APK
+      #   if: env.KEYSTORE_BASE64 != ''
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: MD-Carpets-Release-APK
+      #     path: android/app/build/outputs/apk/release/app-release.apk
