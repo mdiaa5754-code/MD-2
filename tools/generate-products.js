@@ -1,18 +1,14 @@
 /**
  * tools/generate-products.js
- * 
- * سكريبت توليد كتالوج السجاد تلقائياً من الصور داخل مجلد www/images/products/
- * يعمل بواسطة Node.js وبدون أي مكتبات خارجية (Zero Dependencies).
- * 
- * تسمية الصور المدعومة:
- *  - الصورة الرئيسية: <category>-<number>.jpg (مثال: modern-001.jpg, classic-002.jpg)
- *  - صور المعرض الإضافية لنفس الموديل: modern-001-2.jpg, modern-001-3.jpg
- *  - إذا لم تبدأ الصورة باسم فئة معروفة (مثل 001.jpg) يتم تصنيفها كـ "مودرن" تلقائياً.
- * 
- * الميزات:
- *  1. يحافظ بالكامل على التعديلات اليدوية من ملف www/data/overrides.js
- *  2. يربط المقاسات والأسعار التلقائية بالفئة
- *  3. يجعل أول 12 منتج مميزين تلقائياً (featured)
+ * يولّد www/data/products.js تلقائياً من الصور في www/images/products/
+ * بدون أي مكتبات خارجية.
+ *
+ * أسماء الصور المدعومة:
+ *   MD001.jpg           -> منتج بكود MD001 (الصورة الرئيسية)
+ *   MD001-2.jpg         -> صورة إضافية لنفس المنتج (أو MD001_2.jpg)
+ *   modern-001.jpg      -> الشكل القديم (فئة-رقم) لسه شغال
+ * الأسعار والمقاسات: عدّلها في SIZE_PRICES تحت (مكان واحد لكل المنتجات)
+ * التعديلات اليدوية لمنتج معين (اسم، تصنيف، لون، خصم...): www/data/overrides.js
  */
 
 const fs = require('fs');
@@ -22,216 +18,157 @@ const PRODUCTS_DIR = path.join(__dirname, '..', 'www', 'images', 'products');
 const OUTPUT_FILE = path.join(__dirname, '..', 'www', 'data', 'products.js');
 const OVERRIDES_FILE = path.join(__dirname, '..', 'www', 'data', 'overrides.js');
 
-// قاموس الفئات وترجمتها للعربية
 const CATEGORY_MAP = {
-  modern: { id: 'modern', nameAr: 'مودرن', tag: 'مودرن' },
-  classic: { id: 'classic', nameAr: 'كلاسيك', tag: 'كلاسيك' },
-  kids: { id: 'kids', nameAr: 'أطفال', tag: 'أطفال' },
-  kitchen: { id: 'kitchen', nameAr: 'مطبخ وممرات', tag: 'مطبخ' },
-  prayer: { id: 'prayer', nameAr: 'سجاد صلاة', tag: 'صلاة' },
-  moquette: { id: 'moquette', nameAr: 'موكيت', tag: 'موكيت' }
+  modern:   { nameAr: 'مودرن' },
+  classic:  { nameAr: 'كلاسيك' },
+  kids:     { nameAr: 'أطفال' },
+  kitchen:  { nameAr: 'مطبخ وممرات' },
+  prayer:   { nameAr: 'سجاد صلاة' },
+  moquette: { nameAr: 'موكيت' }
 };
 
-// مقاسات وأسعار افتراضية لكل فئة (يمكن تعديلها من config.js أو overrides.js)
-const DEFAULT_SIZE_PRICES = {
-  modern: [
-    { size: '160x230', price: 1350 },
-    { size: '200x290', price: 2100 },
-    { size: '240x340', price: 2950 },
-    { size: 'مشاية 80x200', price: 600 },
-    { size: 'مشاية 80x300', price: 850 }
-  ],
-  classic: [
-    { size: '160x230', price: 1450 },
-    { size: '200x290', price: 2250 },
-    { size: '240x340', price: 3150 },
-    { size: 'مشاية 80x200', price: 650 },
-    { size: 'مشاية 80x300', price: 900 }
-  ],
-  kids: [
-    { size: '120x180', price: 850 },
-    { size: '160x220', price: 1250 }
-  ],
-  kitchen: [
-    { size: '80x150', price: 380 },
-    { size: '80x200', price: 490 },
-    { size: '80x300', price: 720 },
-    { size: '120x180', price: 890 }
-  ],
-  prayer: [
-    { size: 'مفردة 70x120', price: 220 },
-    { size: 'صف 5 أفراد 120x300', price: 950 }
-  ],
-  moquette: [
-    { size: 'متر مربع (قص حسب الطلب)', price: 190 },
-    { size: 'رول كامل 4x25 متر', price: 16500 }
-  ]
-};
+// ===== أسعار المقاسات (جنيه) - بتنطبق على كل المنتجات =====
+// عدّل أي سعر هنا وشغّل السكريبت (أو ارفع التعديل) وهيتغير في الكل
+const SIZE_PRICES = [
+  { size: '0.50×0.80', price: 62.5 },
+  { size: '0.90×1.80', price: 300 },
+  { size: '0.90×2.80', price: 425 },
+  { size: '0.90×3.80', price: 562.5 },
+  { size: '1.00×1.00', price: 212.5 },
+  { size: '1.00×2.00', price: 375 },
+  { size: '1.00×3.00', price: 500 },
+  { size: '1.00×4.00', price: 625 },
+  { size: '1.20×1.20', price: 312.5 },
+  { size: '1.20×2.00', price: 400 },
+  { size: '1.40×2.00', price: 475 },
+  { size: '1.60×1.60', price: 562.5 },
+  { size: '1.60×2.30', price: 625 },
+  { size: '1.80×1.80', price: 687.5 },
+  { size: '1.80×2.80', price: 750 },
+  { size: '2.00×2.80', price: 875 },
+  { size: '2.00×3.80', price: 1187.5 },
+  { size: '2.40×3.20', price: 1500 },
+  { size: '2.60×3.60', price: 1812.5 }
+];
+// المقاس اللي بيتعرض سعره كسعر أساسي على كارت المنتج
+const MAIN_SIZE = '1.60×2.30';
 
-// قراءة ملف التعديلات اليدوية إن وجد
+// ----- قراءة التعديلات اليدوية -----
 let manualOverrides = {};
 if (fs.existsSync(OVERRIDES_FILE)) {
   try {
-    const fileContent = fs.readFileSync(OVERRIDES_FILE, 'utf8');
-    // يدعم ملف window.MD_OVERRIDES = { ... } أو module.exports = { ... }
-    const jsonMatch = fileContent.match(/=\s*({[\s\S]*});?/);
-    if (jsonMatch && jsonMatch[1]) {
-      const evalFn = new Function('return ' + jsonMatch[1]);
-      manualOverrides = evalFn() || {};
-      console.log(` تم تحميل ${Object.keys(manualOverrides).length} تعديل يدوي من overrides.js`);
-    }
-  } catch (err) {
-    console.warn(' تحذير: تعذر قراءة overrides.js، سيتم المتابعة بدون تعديلات يدوية:', err.message);
+    const txt = fs.readFileSync(OVERRIDES_FILE, 'utf8');
+    const m = txt.match(/=\s*({[\s\S]*});?/);
+    if (m && m[1]) manualOverrides = new Function('return ' + m[1])() || {};
+    console.log(`تم تحميل ${Object.keys(manualOverrides).length} تعديل يدوي`);
+  } catch (e) {
+    console.warn('تعذر قراءة overrides.js:', e.message);
   }
 }
 
-// التأكد من وجود مجلد الصور
-if (!fs.existsSync(PRODUCTS_DIR)) {
-  fs.mkdirSync(PRODUCTS_DIR, { recursive: true });
-}
+if (!fs.existsSync(PRODUCTS_DIR)) fs.mkdirSync(PRODUCTS_DIR, { recursive: true });
 
-// قراءة ملفات الصور
-const files = fs.readdirSync(PRODUCTS_DIR);
-const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
+const EXTS = ['.jpg', '.jpeg', '.png', '.webp'];
+const map = new Map();
 
-// تجميع الصور حسب معرف المنتج
-const productsMap = new Map();
-
-files.forEach(file => {
+fs.readdirSync(PRODUCTS_DIR).forEach(file => {
   const ext = path.extname(file).toLowerCase();
-  if (!imageExtensions.includes(ext)) return;
+  if (!EXTS.includes(ext)) return;
+  const base = path.basename(file, ext);
 
-  const baseName = path.basename(file, ext);
-  // صيغة الفحص:
-  // 1) category-number (مثل modern-001)
-  // 2) category-number-galleryIndex (مثل modern-001-2)
-  // 3) number (مثل 001) -> تذهب لـ modern
-  // 4) number-galleryIndex (مثل 001-2)
-  let categoryKey = 'modern';
-  let modelNumber = '';
-  let galleryIndex = 1;
+  let category = 'modern', number = '', gallery = 1, code = '';
+  let m;
 
-  const matchWithCat = baseName.match(/^([a-zA-Z]+)-(\d+)(?:-(\d+))?$/);
-  const matchOnlyNum = baseName.match(/^(\d+)(?:-(\d+))?$/);
-
-  if (matchWithCat) {
-    const rawCat = matchWithCat[1].toLowerCase();
-    categoryKey = CATEGORY_MAP[rawCat] ? rawCat : 'modern';
-    modelNumber = matchWithCat[2];
-    galleryIndex = matchWithCat[3] ? parseInt(matchWithCat[3], 10) : 1;
-  } else if (matchOnlyNum) {
-    categoryKey = 'modern';
-    modelNumber = matchOnlyNum[1];
-    galleryIndex = matchOnlyNum[2] ? parseInt(matchOnlyNum[2], 10) : 1;
+  if ((m = base.match(/^([a-zA-Z]+)-(\d+)(?:-(\d+))?$/)) && CATEGORY_MAP[m[1].toLowerCase()]) {
+    // الشكل القديم: modern-001 أو modern-001-2
+    category = m[1].toLowerCase();
+    number = m[2];
+    gallery = m[3] ? parseInt(m[3], 10) : 1;
+    code = 'MD' + number;
+  } else if ((m = base.match(/^([a-zA-Z]+)[-_]?(\d+)(?:[-_](\d+))?$/))) {
+    // أكواد: MD001 أو MD001-2 أو MD-001
+    number = m[2];
+    gallery = m[3] ? parseInt(m[3], 10) : 1;
+    code = (m[1] + number).toUpperCase();
+  } else if ((m = base.match(/^(\d+)(?:[-_](\d+))?$/))) {
+    number = m[1];
+    gallery = m[2] ? parseInt(m[2], 10) : 1;
+    code = 'MD' + number;
   } else {
-    // ملف غير متوافق تماماً مع النمط ولكن صورة صالحة
-    const cleaned = baseName.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
-    modelNumber = cleaned;
-    categoryKey = 'modern';
+    // أي اسم تاني
+    code = base.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() || 'MD';
+    number = code;
   }
 
-  const productId = `${categoryKey}-${modelNumber}`;
+  const id = code.toLowerCase();
+  if (!map.has(id)) map.set(id, { id, code, category, number, images: [] });
+  const item = map.get(id);
+  if (CATEGORY_MAP[category] && category !== 'modern') item.category = category;
+  item.images.push({ file, index: gallery });
+});
 
-  if (!productsMap.has(productId)) {
-    productsMap.set(productId, {
-      id: productId,
-      categoryKey,
-      modelNumber,
-      images: []
-    });
-  }
+// ترتيب المنتجات بالكود
+const items = Array.from(map.values()).sort((a, b) =>
+  a.code.localeCompare(b.code, 'en', { numeric: true })
+);
 
-  productsMap.get(productId).images.push({
-    file,
-    index: galleryIndex
+const mainPrice = (SIZE_PRICES.find(s => s.size === MAIN_SIZE) || SIZE_PRICES[0]).price;
+const productList = [];
+
+items.forEach((item, i) => {
+  item.images.sort((a, b) => a.index - b.index);
+  const files = item.images.map(x => `images/products/${x.file}`);
+  const o = manualOverrides[item.id] || manualOverrides[item.code] || {};
+  const cat = o.category || item.category;
+  const catMeta = CATEGORY_MAP[cat] || CATEGORY_MAP.modern;
+
+  productList.push({
+    id: item.id,
+    code: item.code,
+    title: o.title || `سجادة ${catMeta.nameAr} - كود ${item.code}`,
+    category: cat,
+    categoryNameAr: catMeta.nameAr,
+    modelNumber: item.number,
+    mainImage: files[0] || '',
+    images: o.images && o.images.length ? o.images : files,
+    price: typeof o.price === 'number' ? o.price : mainPrice,
+    salePrice: typeof o.salePrice === 'number' ? o.salePrice : null,
+    sizes: o.sizes || SIZE_PRICES,
+    colors: o.colors || ['بيج وذهبي', 'رمادي مودرن', 'كحلي ملكي'],
+    material: o.material || 'بولي بروبلين ناعم الملمس، مقاوم للبقع',
+    origin: o.origin || 'صناعة مصرية',
+    description: o.description || 'سجادة بخامة ممتازة، سهلة التنظيف وثابتة على الأرضيات، وتصميم أنيق يناسب مختلف الديكورات.',
+    featured: typeof o.featured === 'boolean' ? o.featured : i < 12,
+    outOfStock: Boolean(o.outOfStock),
+    limited: Boolean(o.limited),
+    createdAt: o.createdAt || new Date().toISOString().split('T')[0]
   });
 });
 
-// ترتيب الصور داخل كل منتج (الصورة الرئيسية index=1 أولاً)
-const productList = [];
-let indexCount = 0;
-
-productsMap.forEach(item => {
-  indexCount++;
-  item.images.sort((a, b) => a.index - b.index);
-  const imageFiles = item.images.map(img => `images/products/${img.file}`);
-  const mainImage = imageFiles[0] || '';
-
-  const catMeta = CATEGORY_MAP[item.categoryKey] || CATEGORY_MAP.modern;
-  const defaultSizes = DEFAULT_SIZE_PRICES[item.categoryKey] || DEFAULT_SIZE_PRICES.modern;
-  const defaultPrice = defaultSizes[0] ? defaultSizes[0].price : 1200;
-
-  // العنوان الافتراضي بالعربية
-  const defaultTitle = `سجادة ${catMeta.nameAr} موديل ${item.modelNumber}`;
-  const defaultDesc = `سجادة فاخرة خامة ممتازة سهلة التنظيف وثابتة على الأرضيات، تصميم عصري راقي يضفي دفئاً وفخامة على منزلك.`;
-
-  // دمج التعديلات اليدوية
-  const override = manualOverrides[item.id] || {};
-
-  const product = {
-    id: item.id,
-    title: override.title || defaultTitle,
-    category: override.category || item.categoryKey,
-    categoryNameAr: catMeta.nameAr,
-    modelNumber: item.modelNumber,
-    mainImage: mainImage,
-    images: override.images && override.images.length > 0 ? override.images : imageFiles,
-    price: typeof override.price === 'number' ? override.price : defaultPrice,
-    salePrice: typeof override.salePrice === 'number' ? override.salePrice : null,
-    sizes: override.sizes || defaultSizes,
-    colors: override.colors || ['بيج وذهبي', 'رمادي مودرن', 'كحلي ملكي'],
-    material: override.material || 'بولي بروبلين معالج ناعم الملمس، مقاوم للبقع',
-    origin: override.origin || 'صناعة مصرية بجودة عالمية',
-    description: override.description || defaultDesc,
-    featured: typeof override.featured === 'boolean' ? override.featured : (indexCount <= 12),
-    outOfStock: Boolean(override.outOfStock),
-    limited: Boolean(override.limited),
-    createdAt: override.createdAt || new Date().toISOString().split('T')[0]
-  };
-
-  productList.push(product);
-});
-
-// إذا لم توجد أي صور في المجلد، توليد أمثلة أولية حتى لا يكون المتجر فارغاً
+// لو مفيش صور خالص: منتجات تجريبية (الصور هتظهر placeholder)
 if (productList.length === 0) {
-  console.log('ℹ لم يتم العثور على صور في www/images/products/، سيتم وضع 12 منتجاً تجريبياً.');
+  console.log('مفيش صور، هيتعمل 12 منتج تجريبي.');
+  const cats = Object.keys(CATEGORY_MAP);
   for (let i = 1; i <= 12; i++) {
     const num = String(i).padStart(3, '0');
-    const catKeys = ['modern', 'classic', 'kids', 'kitchen', 'prayer', 'moquette'];
-    const catKey = catKeys[(i - 1) % catKeys.length];
-    const catMeta = CATEGORY_MAP[catKey];
-    const defaultSizes = DEFAULT_SIZE_PRICES[catKey];
+    const cat = cats[(i - 1) % cats.length];
     productList.push({
-      id: `${catKey}-${num}`,
-      title: `سجادة ${catMeta.nameAr} موديل ${num}`,
-      category: catKey,
-      categoryNameAr: catMeta.nameAr,
-      modelNumber: num,
-      mainImage: `images/products/${catKey}-${num}.jpg`,
-      images: [`images/products/${catKey}-${num}.jpg`],
-      price: defaultSizes[0].price,
-      salePrice: i % 3 === 0 ? Math.round(defaultSizes[0].price * 0.85) : null,
-      sizes: defaultSizes,
-      colors: ['بيج وذهبي', 'رمادي وكافيه', 'كحلي فخم'],
-      material: 'بولي بروبلين حريري فائق النعومة، مقاوم للاتساخ وسهل الغسيل',
-      origin: 'صناعة مصرية ممتازة',
-      description: `تصميم فخم وألوان ثابتة تناسب جميع الديكورات، نسج تركي فاخر بأيدي ماهرة.`,
-      featured: i <= 8,
-      outOfStock: false,
-      limited: i === 2 || i === 7,
-      createdAt: '2026-10-26'
+      id: 'md' + num, code: 'MD' + num,
+      title: `سجادة ${CATEGORY_MAP[cat].nameAr} - كود MD${num}`,
+      category: cat, categoryNameAr: CATEGORY_MAP[cat].nameAr, modelNumber: num,
+      mainImage: `images/products/MD${num}.jpg`, images: [`images/products/MD${num}.jpg`],
+      price: mainPrice, salePrice: null, sizes: SIZE_PRICES,
+      colors: ['بيج وذهبي', 'رمادي', 'كحلي'],
+      material: 'بولي بروبلين ناعم', origin: 'صناعة مصرية',
+      description: 'سجادة بخامة ممتازة وتصميم أنيق.',
+      featured: true, outOfStock: false, limited: false, createdAt: '2026-10-27'
     });
   }
 }
 
-// كتابة ملف products.js
-const fileContent = `/**
- * ملف المنتجات المولد تلقائياً بواسطة tools/generate-products.js
- * لا تقم بتعديل هذا الملف يدوياً مباشرة، لأن السكريبت سيعيد بناءه عند إضافة صور جديدة.
- * لإجراء تعديلات يدوية دائمة (مثل تغيير اسم أو سعر أو وصف منتج بعينه)، أضف التعديل في:
- * www/data/overrides.js
- * 
- * تم التوليد بتاريخ: ${new Date().toLocaleString('ar-EG')}
+const out = `/**
+ * ملف مولّد تلقائياً بواسطة tools/generate-products.js - لا تعدله يدوياً.
+ * للتعديل الدائم على منتج: www/data/overrides.js
  * إجمالي المنتجات: ${productList.length}
  */
 
@@ -242,5 +179,5 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 `;
 
-fs.writeFileSync(OUTPUT_FILE, fileContent, 'utf8');
-console.log(` تم بنجاح إنشاء كتيّب المنتجات (${productList.length} منتج) في ${OUTPUT_FILE}`);
+fs.writeFileSync(OUTPUT_FILE, out, 'utf8');
+console.log(`تم إنشاء ${productList.length} منتج في ${OUTPUT_FILE}`);
